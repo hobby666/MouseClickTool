@@ -331,10 +331,17 @@ namespace MouseClickTool
                 string windowTitle = GetWindowTitle(rootHwnd);
                 if (string.IsNullOrWhiteSpace(windowTitle)) windowTitle = "无标题程序";
 
-                if (this.Controls.ContainsKey("lbl_BindStatus"))
+                // 【新增】限制标题最大显示长度（比如最多显示 10 个字符，超出的变成 ...）
+                int maxLength = 7;
+                string displayTitle = windowTitle.Length > maxLength ? windowTitle.Substring(0, maxLength) + ".." : windowTitle;
+
+                if (this.Controls.ContainsKey("lbl_BindStatus") && lbl_BindStatus != null)
                 {
-                    lbl_BindStatus.Text = $"已绑定主程序: {windowTitle}";
+                    lbl_BindStatus.Text = $"已绑定主程序：{displayTitle}";
                     lbl_BindStatus.ForeColor = Color.Green;
+                    // ==================== 就是在这里添加 ====================
+                    toolTip1.SetToolTip(lbl_BindStatus, $"已绑定主程序：{windowTitle}");
+                    // ========================================================
                 }
                 AppendLog($"🔗 绑定主窗口: [{windowTitle}]，句柄: {rootHwnd.ToString("X")}");
             }

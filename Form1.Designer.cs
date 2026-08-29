@@ -84,6 +84,7 @@
             this.lbl_BindStatus = new System.Windows.Forms.Label();
             this.chk_BindWindow = new System.Windows.Forms.CheckBox();
             this.lbl_CaptureHint = new System.Windows.Forms.Label();
+            this.toolTip1 = new System.Windows.Forms.ToolTip(this.components);
             this.gb_Position.SuspendLayout();
             this.gb_Edit.SuspendLayout();
             this.gb_Interval.SuspendLayout();
@@ -519,5 +520,6 @@
         private System.Windows.Forms.Label lbl_BindStatus;
         private System.Windows.Forms.CheckBox chk_BindWindow;
         private System.Windows.Forms.Label lbl_CaptureHint;
+        private System.Windows.Forms.ToolTip toolTip1;
     }
 }
