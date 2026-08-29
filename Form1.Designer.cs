@@ -21,7 +21,6 @@
         private System.Windows.Forms.Label lbl_ClickCount;
         private System.Windows.Forms.Timer timer_MousePos;
         private System.Windows.Forms.Label lbl_HotkeyInfo;
-        private System.Windows.Forms.Label lbl_CaptureHint;
         private System.Windows.Forms.CheckBox chk_Enabled;
         private System.Windows.Forms.Button btn_Add;
         private System.Windows.Forms.Button btn_Update;
@@ -53,7 +52,6 @@
             this.gb_Position = new System.Windows.Forms.GroupBox();
             this.btn_GetPos = new System.Windows.Forms.Button();
             this.lbl_CurrentPos = new System.Windows.Forms.Label();
-            this.lbl_CaptureHint = new System.Windows.Forms.Label();
             this.gb_Edit = new System.Windows.Forms.GroupBox();
             this.chk_Enabled = new System.Windows.Forms.CheckBox();
             this.btn_Add = new System.Windows.Forms.Button();
@@ -81,11 +79,17 @@
             this.lbl_ClickCount = new System.Windows.Forms.Label();
             this.timer_MousePos = new System.Windows.Forms.Timer(this.components);
             this.lbl_HotkeyInfo = new System.Windows.Forms.Label();
+            this.nud_LoopCount = new System.Windows.Forms.NumericUpDown();
+            this.label1 = new System.Windows.Forms.Label();
+            this.lbl_BindStatus = new System.Windows.Forms.Label();
+            this.chk_BindWindow = new System.Windows.Forms.CheckBox();
+            this.lbl_CaptureHint = new System.Windows.Forms.Label();
             this.gb_Position.SuspendLayout();
             this.gb_Edit.SuspendLayout();
             this.gb_Interval.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nud_Interval)).BeginInit();
             this.gb_PointList.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.nud_LoopCount)).BeginInit();
             this.SuspendLayout();
             // 
             // gb_Position
@@ -121,20 +125,9 @@
             this.lbl_CurrentPos.Location = new System.Drawing.Point(6, 67);
             this.lbl_CurrentPos.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.lbl_CurrentPos.Name = "lbl_CurrentPos";
-            this.lbl_CurrentPos.Size = new System.Drawing.Size(59, 17);
+            this.lbl_CurrentPos.Size = new System.Drawing.Size(89, 25);
             this.lbl_CurrentPos.TabIndex = 1;
             this.lbl_CurrentPos.Text = "X: 0, Y: 0";
-            // 
-            // lbl_CaptureHint
-            // 
-            this.lbl_CaptureHint.Font = new System.Drawing.Font("微软雅黑", 8F);
-            this.lbl_CaptureHint.ForeColor = System.Drawing.Color.DarkGray;
-            this.lbl_CaptureHint.Location = new System.Drawing.Point(13, 110);
-            this.lbl_CaptureHint.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
-            this.lbl_CaptureHint.Name = "lbl_CaptureHint";
-            this.lbl_CaptureHint.Size = new System.Drawing.Size(180, 48);
-            this.lbl_CaptureHint.TabIndex = 2;
-            this.lbl_CaptureHint.Text = "点击「获取坐标」后，\r\n在目标位置点左键捕获";
             // 
             // gb_Edit
             // 
@@ -150,7 +143,7 @@
             this.gb_Edit.Controls.Add(this.lbl_X);
             this.gb_Edit.Controls.Add(this.txt_X);
             this.gb_Edit.Controls.Add(this.gb_Interval);
-            this.gb_Edit.Location = new System.Drawing.Point(4, 159);
+            this.gb_Edit.Location = new System.Drawing.Point(9, 172);
             this.gb_Edit.Margin = new System.Windows.Forms.Padding(2);
             this.gb_Edit.Name = "gb_Edit";
             this.gb_Edit.Padding = new System.Windows.Forms.Padding(2);
@@ -167,7 +160,7 @@
             this.chk_Enabled.Location = new System.Drawing.Point(9, 86);
             this.chk_Enabled.Margin = new System.Windows.Forms.Padding(2);
             this.chk_Enabled.Name = "chk_Enabled";
-            this.chk_Enabled.Size = new System.Drawing.Size(48, 16);
+            this.chk_Enabled.Size = new System.Drawing.Size(55, 21);
             this.chk_Enabled.TabIndex = 10;
             this.chk_Enabled.Text = "启用";
             this.chk_Enabled.UseVisualStyleBackColor = true;
@@ -341,11 +334,11 @@
             // gb_PointList
             // 
             this.gb_PointList.Controls.Add(this.lv_Points);
-            this.gb_PointList.Location = new System.Drawing.Point(197, 14);
+            this.gb_PointList.Location = new System.Drawing.Point(200, 11);
             this.gb_PointList.Margin = new System.Windows.Forms.Padding(2);
             this.gb_PointList.Name = "gb_PointList";
             this.gb_PointList.Padding = new System.Windows.Forms.Padding(2);
-            this.gb_PointList.Size = new System.Drawing.Size(323, 272);
+            this.gb_PointList.Size = new System.Drawing.Size(367, 272);
             this.gb_PointList.TabIndex = 2;
             this.gb_PointList.TabStop = false;
             this.gb_PointList.Text = "点位列表";
@@ -364,7 +357,7 @@
             this.lv_Points.Location = new System.Drawing.Point(2, 16);
             this.lv_Points.Margin = new System.Windows.Forms.Padding(2);
             this.lv_Points.Name = "lv_Points";
-            this.lv_Points.Size = new System.Drawing.Size(319, 254);
+            this.lv_Points.Size = new System.Drawing.Size(363, 254);
             this.lv_Points.TabIndex = 0;
             this.lv_Points.UseCompatibleStateImageBehavior = false;
             this.lv_Points.View = System.Windows.Forms.View.Details;
@@ -377,12 +370,12 @@
             // col_X
             // 
             this.col_X.Text = "X";
-            this.col_X.Width = 80;
+            this.col_X.Width = 88;
             // 
             // col_Y
             // 
             this.col_Y.Text = "Y";
-            this.col_Y.Width = 80;
+            this.col_Y.Width = 115;
             // 
             // col_Interval
             // 
@@ -392,7 +385,7 @@
             // btn_StartStop
             // 
             this.btn_StartStop.Font = new System.Drawing.Font("微软雅黑", 12F, System.Drawing.FontStyle.Bold);
-            this.btn_StartStop.Location = new System.Drawing.Point(5, 336);
+            this.btn_StartStop.Location = new System.Drawing.Point(11, 397);
             this.btn_StartStop.Margin = new System.Windows.Forms.Padding(2);
             this.btn_StartStop.Name = "btn_StartStop";
             this.btn_StartStop.Size = new System.Drawing.Size(186, 36);
@@ -403,23 +396,23 @@
             // 
             // txt_Log
             // 
-            this.txt_Log.Location = new System.Drawing.Point(199, 285);
+            this.txt_Log.Location = new System.Drawing.Point(202, 284);
             this.txt_Log.Margin = new System.Windows.Forms.Padding(2);
             this.txt_Log.Multiline = true;
             this.txt_Log.Name = "txt_Log";
             this.txt_Log.ReadOnly = true;
             this.txt_Log.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txt_Log.Size = new System.Drawing.Size(319, 161);
+            this.txt_Log.Size = new System.Drawing.Size(363, 241);
             this.txt_Log.TabIndex = 4;
             // 
             // lbl_ClickCount
             // 
             this.lbl_ClickCount.AutoSize = true;
             this.lbl_ClickCount.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
-            this.lbl_ClickCount.Location = new System.Drawing.Point(4, 390);
+            this.lbl_ClickCount.Location = new System.Drawing.Point(9, 450);
             this.lbl_ClickCount.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.lbl_ClickCount.Name = "lbl_ClickCount";
-            this.lbl_ClickCount.Size = new System.Drawing.Size(70, 17);
+            this.lbl_ClickCount.Size = new System.Drawing.Size(105, 25);
             this.lbl_ClickCount.TabIndex = 5;
             this.lbl_ClickCount.Text = "点击次数: 0";
             // 
@@ -430,18 +423,68 @@
             // lbl_HotkeyInfo
             // 
             this.lbl_HotkeyInfo.AutoSize = true;
-            this.lbl_HotkeyInfo.Location = new System.Drawing.Point(4, 418);
+            this.lbl_HotkeyInfo.Location = new System.Drawing.Point(9, 478);
             this.lbl_HotkeyInfo.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.lbl_HotkeyInfo.Name = "lbl_HotkeyInfo";
             this.lbl_HotkeyInfo.Size = new System.Drawing.Size(173, 24);
             this.lbl_HotkeyInfo.TabIndex = 6;
             this.lbl_HotkeyInfo.Text = "快捷键：Alt+F2 - 开始/停止，\r\nAlt+F3 - 获取坐标";
             // 
+            // nud_LoopCount
+            // 
+            this.nud_LoopCount.Location = new System.Drawing.Point(25, 361);
+            this.nud_LoopCount.Name = "nud_LoopCount";
+            this.nud_LoopCount.Size = new System.Drawing.Size(80, 21);
+            this.nud_LoopCount.TabIndex = 11;
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Location = new System.Drawing.Point(21, 342);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(161, 12);
+            this.label1.TabIndex = 12;
+            this.label1.Text = "点击次数设置: 0,表示不限制";
+            // 
+            // lbl_BindStatus
+            // 
+            this.lbl_BindStatus.AutoSize = true;
+            this.lbl_BindStatus.ForeColor = System.Drawing.Color.Red;
+            this.lbl_BindStatus.Location = new System.Drawing.Point(12, 137);
+            this.lbl_BindStatus.Name = "lbl_BindStatus";
+            this.lbl_BindStatus.Size = new System.Drawing.Size(155, 24);
+            this.lbl_BindStatus.TabIndex = 13;
+            this.lbl_BindStatus.Text = "当前状态：未绑定窗口 \r\n          (按 Alt+W 绑定)";
+            // 
+            // chk_BindWindow
+            // 
+            this.chk_BindWindow.AutoSize = true;
+            this.chk_BindWindow.Location = new System.Drawing.Point(18, 113);
+            this.chk_BindWindow.Name = "chk_BindWindow";
+            this.chk_BindWindow.Size = new System.Drawing.Size(163, 21);
+            this.chk_BindWindow.TabIndex = 14;
+            this.chk_BindWindow.Text = "启用指定窗体(后台点击)";
+            this.chk_BindWindow.UseVisualStyleBackColor = true;
+            // 
+            // lbl_CaptureHint
+            // 
+            this.lbl_CaptureHint.Font = new System.Drawing.Font("微软雅黑", 8F);
+            this.lbl_CaptureHint.ForeColor = System.Drawing.Color.DarkGray;
+            this.lbl_CaptureHint.Location = new System.Drawing.Point(9, 538);
+            this.lbl_CaptureHint.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.lbl_CaptureHint.Name = "lbl_CaptureHint";
+            this.lbl_CaptureHint.Size = new System.Drawing.Size(316, 48);
+            this.lbl_CaptureHint.TabIndex = 2;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(525, 457);
+            this.ClientSize = new System.Drawing.Size(568, 526);
+            this.Controls.Add(this.chk_BindWindow);
+            this.Controls.Add(this.lbl_BindStatus);
+            this.Controls.Add(this.label1);
+            this.Controls.Add(this.nud_LoopCount);
             this.Controls.Add(this.lbl_HotkeyInfo);
             this.Controls.Add(this.lbl_ClickCount);
             this.Controls.Add(this.lbl_CaptureHint);
@@ -450,7 +493,7 @@
             this.Controls.Add(this.gb_PointList);
             this.Controls.Add(this.gb_Edit);
             this.Controls.Add(this.gb_Position);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.Fixed3D;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(2);
             this.MaximizeBox = false;
@@ -465,9 +508,16 @@
             this.gb_Interval.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nud_Interval)).EndInit();
             this.gb_PointList.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.nud_LoopCount)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
         }
+
+        private System.Windows.Forms.NumericUpDown nud_LoopCount;
+        private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.Label lbl_BindStatus;
+        private System.Windows.Forms.CheckBox chk_BindWindow;
+        private System.Windows.Forms.Label lbl_CaptureHint;
     }
 }

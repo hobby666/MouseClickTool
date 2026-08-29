@@ -13,14 +13,54 @@ namespace MouseClickTool
     {
         #region Windows API 导入
 
-        [DllImport("user32.dll")]
-        private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+        // 获取窗口标题相关的 API
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
 
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern int GetWindowTextLength(IntPtr hWnd);
+
+        [DllImport("user32.dll", ExactSpelling = true)]
+        private static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
+
+        private const uint GA_ROOT = 2; // 获取根窗口标志
+
+        // 强制同步发送消息（比 PostMessage 更可靠）
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+        // 获取控件的真实类名，用于透视绑定目标
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
+        // 根据父窗口的相对坐标，获取该位置的子窗口句柄
+        [DllImport("user32.dll")]
+        private static extern IntPtr ChildWindowFromPoint(IntPtr hWndParent, POINT Point);
+
+        // 将相对坐标转换为屏幕物理坐标
+        [DllImport("user32.dll")]
+        private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out POINT lpPoint);
+
+        // 全局物理鼠标移动与点击 API (用于默认不指定窗体的模式)
         [DllImport("user32.dll")]
         private static extern bool SetCursorPos(int x, int y);
 
         [DllImport("user32.dll")]
-        private static extern bool GetCursorPos(out POINT lpPoint);
+        private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+
+        // 获取指定坐标处的窗口句柄
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(POINT Point);
+
+        // 将屏幕坐标转换为相对窗口的客户区坐标
+        [DllImport("user32.dll")]
+        private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
@@ -39,7 +79,12 @@ namespace MouseClickTool
             public IntPtr dwExtraInfo;
         }
 
-        // 鼠标事件常量
+        // 后台鼠标消息常量
+        private const uint WM_LBUTTONDOWN = 0x0201;
+        private const uint WM_LBUTTONUP = 0x0202;
+        private const int MK_LBUTTON = 0x0001;
+
+        // 全局物理鼠标消息常量
         private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         private const uint MOUSEEVENTF_LEFTUP = 0x0004;
 
@@ -55,6 +100,9 @@ namespace MouseClickTool
         private IntPtr _mouseHookID = IntPtr.Zero;
         private List<ClickPoint> _clickPoints = new List<ClickPoint>();
         private int _selectedIndex = -1;
+
+        // 目标窗口句柄
+        private IntPtr _targetHandle = IntPtr.Zero;
 
         #endregion
 
@@ -77,31 +125,27 @@ namespace MouseClickTool
             // 设置默认间隔
             nud_Interval.Value = 1000;
             lbl_CurrentPos.Text = "X: 0, Y: 0";
+
+            // 初始化绑定提示
+            if (this.Controls.ContainsKey("lbl_BindStatus"))
+            {
+                lbl_BindStatus.Text = "状态: 未绑定 \r\n(选中目标按 Alt+W 绑定窗体)";
+                lbl_BindStatus.ForeColor = Color.Red;
+            }
+
             UpdateUI();
             timer_MousePos.Start();
 
             // 设置快捷键提示
-            lbl_HotkeyInfo.Text = "快捷键：Alt+F2 - 开始/停止，\r\n Alt+F3 - 获取坐标";
+            lbl_HotkeyInfo.Text = "快捷键：Alt+F2 - 开始/停止\r\nAlt+F3 - 获取坐标\r\nAlt+W - 绑定后台窗口";
             lbl_HotkeyInfo.ForeColor = Color.Gray;
-            lbl_CaptureHint.Text = "点击「获取坐标」后,\r\n在目标位置点击鼠标左键即可捕获";
+            lbl_CaptureHint.Text = "请按需勾选指定窗体！\r\n点击「获取坐标」后捕获坐标";
 
             // 绑定 ListView 事件
             lv_Points.SelectedIndexChanged += Lv_Points_SelectedIndexChanged;
             lv_Points.MouseDoubleClick += Lv_Points_MouseDoubleClick;
 
-            // 添加默认点位
-            AddDefaultPoints();
-
-            // 更新按钮状态
             UpdateButtonStates();
-        }
-
-        private void AddDefaultPoints()
-        {
-            _clickPoints.Add(new ClickPoint { X = 100, Y = 100, Interval = 1000, IsEnabled = true });
-            _clickPoints.Add(new ClickPoint { X = 200, Y = 200, Interval = 1500, IsEnabled = true });
-            _clickPoints.Add(new ClickPoint { X = 300, Y = 300, Interval = 2000, IsEnabled = true });
-            RefreshPointList();
         }
 
         #endregion
@@ -153,7 +197,6 @@ namespace MouseClickTool
         {
             if (lv_Points.SelectedItems.Count > 0)
             {
-                // 双击编辑
                 EditSelectedPoint();
             }
         }
@@ -168,7 +211,9 @@ namespace MouseClickTool
             point.Interval = (int)nud_Interval.Value;
             point.IsEnabled = chk_Enabled.Checked;
             RefreshPointList();
-            AppendLog($"✅ 已更新点位 {_selectedIndex + 1}: ({point.X}, {point.Y}) 间隔:{point.Interval}ms");
+
+            string modeText = chk_BindWindow.Checked ? "相对" : "全局";
+            AppendLog($"✅ 已更新点位 {_selectedIndex + 1}: ({modeText}X:{point.X}, {modeText}Y:{point.Y}) 间隔:{point.Interval}ms");
         }
 
         #endregion
@@ -186,7 +231,9 @@ namespace MouseClickTool
             int interval = (int)nud_Interval.Value;
             _clickPoints.Add(new ClickPoint { X = x, Y = y, Interval = interval, IsEnabled = chk_Enabled.Checked });
             RefreshPointList();
-            AppendLog($"✅ 添加点位 ({x}, {y}) 间隔:{interval}ms");
+
+            string modeText = chk_BindWindow.Checked ? "相对" : "全局";
+            AppendLog($"✅ 添加{modeText}坐标点位 ({x}, {y}) 间隔:{interval}ms");
         }
 
         private void btn_Update_Click(object sender, EventArgs e)
@@ -249,10 +296,87 @@ namespace MouseClickTool
 
         #endregion
 
-        #region 坐标捕获
+        #region 坐标与句柄捕获
+
+        // 辅助方法：获取窗口的文本/标题
+        private string GetWindowTitle(IntPtr hwnd)
+        {
+            int length = GetWindowTextLength(hwnd);
+            if (length == 0) return "";
+
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(length + 1);
+            GetWindowText(hwnd, sb, sb.Capacity);
+            return sb.ToString();
+        }
+
+        // 绑定目标窗口句柄逻辑 (自动绑定主程序)
+        private void BindTargetWindow()
+        {
+            if (!chk_BindWindow.Checked)
+            {
+                AppendLog("⚠️ 当前为全局屏幕模式，无需绑定窗体。请勾选复选框开启后台模式。");
+                return;
+            }
+
+            GetCursorPos(out POINT point);
+            IntPtr hwnd = WindowFromPoint(point);
+
+            if (hwnd != IntPtr.Zero)
+            {
+                IntPtr rootHwnd = GetAncestor(hwnd, GA_ROOT);
+                if (rootHwnd == IntPtr.Zero) rootHwnd = hwnd;
+
+                _targetHandle = rootHwnd;
+
+                string windowTitle = GetWindowTitle(rootHwnd);
+                if (string.IsNullOrWhiteSpace(windowTitle)) windowTitle = "无标题程序";
+
+                if (this.Controls.ContainsKey("lbl_BindStatus"))
+                {
+                    lbl_BindStatus.Text = $"已绑定主程序: {windowTitle}";
+                    lbl_BindStatus.ForeColor = Color.Green;
+                }
+                AppendLog($"🔗 绑定主窗口: [{windowTitle}]，句柄: {rootHwnd.ToString("X")}");
+            }
+        }
+
+        // 核心算法：从主窗口根据坐标层层向下寻找，找出真正被点击的底层控件
+        private IntPtr ResolveChildHandle(IntPtr parentHandle, POINT parentPt, out POINT childPt)
+        {
+            IntPtr currentHandle = parentHandle;
+            POINT currentPt = parentPt;
+
+            while (true)
+            {
+                IntPtr childHandle = ChildWindowFromPoint(currentHandle, currentPt);
+
+                if (childHandle == IntPtr.Zero || childHandle == currentHandle)
+                {
+                    break;
+                }
+
+                POINT screenPt = currentPt;
+                ClientToScreen(currentHandle, ref screenPt);
+
+                POINT nextPt = screenPt;
+                ScreenToClient(childHandle, ref nextPt);
+
+                currentHandle = childHandle;
+                currentPt = nextPt;
+            }
+
+            childPt = currentPt;
+            return currentHandle;
+        }
 
         private void btn_GetPos_Click(object sender, EventArgs e)
         {
+            if (chk_BindWindow.Checked && _targetHandle == IntPtr.Zero)
+            {
+                MessageBox.Show("您启用了后台指定窗体模式，请先选中目标窗口并按 [Alt+W] 绑定！", "未绑定窗口", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             if (_isCapturing)
             {
                 ExitCaptureMode();
@@ -267,12 +391,12 @@ namespace MouseClickTool
             btn_GetPos.Text = "取消捕获 (Esc)";
             btn_GetPos.BackColor = Color.Orange;
             btn_GetPos.ForeColor = Color.White;
-            lbl_CaptureHint.Text = "🖱️ 请移动鼠标到目标位置，\r\n然后点击左键捕获坐标";
+            lbl_CaptureHint.Text = chk_BindWindow.Checked ? "🖱️ 请在目标窗口内点击左键捕获相对坐标" : "🖱️ 请点击左键捕获屏幕全局坐标";
             lbl_CaptureHint.ForeColor = Color.Blue;
             this.Cursor = Cursors.Cross;
 
             StartMouseHook();
-            AppendLog("进入坐标捕获模式 - 请在目标位置点击鼠标左键");
+            AppendLog("进入坐标捕获模式 - 请点击目标位置");
         }
 
         private void ExitCaptureMode()
@@ -288,13 +412,29 @@ namespace MouseClickTool
             StopMouseHook();
         }
 
-        private void CaptureCoordinate(int x, int y)
+        private void CaptureCoordinate(int screenX, int screenY)
         {
             if (!_isCapturing) return;
 
-            txt_X.Text = x.ToString();
-            txt_Y.Text = y.ToString();
-            lbl_CurrentPos.Text = $"X: {x}, Y: {y}";
+            if (chk_BindWindow.Checked && _targetHandle != IntPtr.Zero)
+            {
+                // 后台模式：转换为相对坐标
+                POINT p = new POINT { X = screenX, Y = screenY };
+                ScreenToClient(_targetHandle, ref p);
+
+                txt_X.Text = p.X.ToString();
+                txt_Y.Text = p.Y.ToString();
+                lbl_CurrentPos.Text = $"相对X: {p.X}, 相对Y: {p.Y}";
+                AppendLog($"✅ 捕获相对坐标: ({p.X}, {p.Y})");
+            }
+            else
+            {
+                // 全局模式：直接使用物理坐标
+                txt_X.Text = screenX.ToString();
+                txt_Y.Text = screenY.ToString();
+                lbl_CurrentPos.Text = $"全局X: {screenX}, 全局Y: {screenY}";
+                AppendLog($"✅ 捕获全局坐标: ({screenX}, {screenY})");
+            }
 
             lbl_CurrentPos.BackColor = Color.LightGreen;
             Task.Delay(300).ContinueWith(_ =>
@@ -305,13 +445,12 @@ namespace MouseClickTool
                 });
             });
 
-            AppendLog($"✅ 捕获坐标: ({x}, {y})");
             ExitCaptureMode();
         }
 
         #endregion
 
-        #region 鼠标钩子
+        #region 鼠标钩子 (仅用于捕获)
 
         private void StartMouseHook()
         {
@@ -349,13 +488,25 @@ namespace MouseClickTool
 
         #endregion
 
-        #region 核心逻辑
+        #region 核心逻辑 (双轨制：后台无感点击 / 屏幕物理点击)
+
+        // 辅助方法：生成 lParam
+        private IntPtr MakeLParam(int x, int y)
+        {
+            return (IntPtr)((y << 16) | (x & 0xFFFF));
+        }
 
         private async void btn_StartStop_Click(object sender, EventArgs e)
         {
             if (_isCapturing)
             {
                 MessageBox.Show("请先退出坐标捕获模式！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (chk_BindWindow.Checked && _targetHandle == IntPtr.Zero)
+            {
+                MessageBox.Show("启用了后台指定窗体，请先按 Alt+W 绑定目标窗口！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -370,7 +521,6 @@ namespace MouseClickTool
                 _isRunning = true;
                 UpdateUI();
 
-                // 获取启用的点位
                 var enabledPoints = new List<ClickPoint>();
                 foreach (var point in _clickPoints)
                 {
@@ -393,11 +543,17 @@ namespace MouseClickTool
 
                 try
                 {
-                    await StartMultiClicking(enabledPoints, _cancellationTokenSource.Token);
+                    int loopCount = 0;
+                    if (this.Controls.ContainsKey("nud_LoopCount") && nud_LoopCount != null)
+                    {
+                        loopCount = (int)nud_LoopCount.Value;
+                    }
+
+                    await StartMultiClicking(enabledPoints, loopCount, _cancellationTokenSource.Token);
                 }
                 catch (OperationCanceledException)
                 {
-                    // 用户取消
+                    AppendLog("⚠️ 用户手动中止了任务");
                 }
                 finally
                 {
@@ -413,13 +569,16 @@ namespace MouseClickTool
             }
         }
 
-        private async Task StartMultiClicking(List<ClickPoint> points, CancellationToken token)
+        private async Task StartMultiClicking(List<ClickPoint> points, int maxLoopCount, CancellationToken token)
         {
-            AppendLog($"开始多位置自动点击 - 共 {points.Count} 个点位");
+            string loopTarget = maxLoopCount == 0 ? "无限" : maxLoopCount.ToString();
+            string modeName = chk_BindWindow.Checked ? "纯后台穿透连点" : "全局屏幕物理连点";
+            AppendLog($"▶ 开始 {modeName} - 共 {points.Count} 个点位，计划循环: {loopTarget} 次");
 
-            int totalClicks = 0;
+            _clickCount = 0;
+            int currentLoop = 0;
 
-            while (!token.IsCancellationRequested)
+            while (!token.IsCancellationRequested && (maxLoopCount == 0 || currentLoop < maxLoopCount))
             {
                 for (int i = 0; i < points.Count; i++)
                 {
@@ -427,22 +586,42 @@ namespace MouseClickTool
 
                     var point = points[i];
 
-                    // 移动到目标位置
-                    SetCursorPos(point.X, point.Y);
-                    await Task.Delay(10, token);
+                    // 【逻辑分支】根据是否勾选决定点击模式
+                    if (chk_BindWindow.Checked)
+                    {
+                        // 模式 1: 后台消息投递（无视遮挡）
+                        POINT mainPt = new POINT { X = point.X, Y = point.Y };
+                        IntPtr actualTargetHandle = ResolveChildHandle(_targetHandle, mainPt, out POINT actualChildPt);
+                        IntPtr lParam = MakeLParam(actualChildPt.X, actualChildPt.Y);
 
-                    // 执行点击
-                    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-                    await Task.Delay(30, token);
-                    mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+                        SendMessage(actualTargetHandle, WM_LBUTTONDOWN, (IntPtr)MK_LBUTTON, lParam);
+                        await Task.Delay(10, token);
+                        SendMessage(actualTargetHandle, WM_LBUTTONUP, IntPtr.Zero, lParam);
+                        AppendLog($"后台点击 {i + 1}: (相对X:{point.X}, 相对Y:{point.Y})");
+                    }
+                    else
+                    {
+                        // 模式 2: 全局物理鼠标移动与点击（伪无感瞬移）
+                        GetCursorPos(out POINT originalPos);
+                        SetCursorPos(point.X, point.Y);
 
-                    totalClicks++;
+                        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+                        await Task.Delay(10, token);
+                        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
+
+                        SetCursorPos(originalPos.X, originalPos.Y);
+                        AppendLog($"全局点击 {i + 1}: (绝对X:{point.X}, 绝对Y:{point.Y})");
+                    }
+
                     _clickCount++;
 
                     this.Invoke((MethodInvoker)delegate
                     {
-                        lbl_ClickCount.Text = $"点击次数: {_clickCount}";
-                        // 高亮当前点击的点位
+                        int displayLoop = currentLoop + 1;
+                        if (maxLoopCount > 0 && displayLoop > maxLoopCount) displayLoop = maxLoopCount;
+
+                        lbl_ClickCount.Text = $"循环进度: {displayLoop}/{loopTarget} | 总点击: {_clickCount}";
+
                         if (i < lv_Points.Items.Count)
                         {
                             foreach (ListViewItem item in lv_Points.Items)
@@ -454,14 +633,17 @@ namespace MouseClickTool
                         }
                     });
 
-                    AppendLog($"🖱️ 点击点位 {i + 1}: ({point.X}, {point.Y}) 间隔:{point.Interval}ms");
-
-                    // 等待该点位的间隔时间
                     await Task.Delay(point.Interval, token);
+                }
+
+                if (!token.IsCancellationRequested)
+                {
+                    currentLoop++;
+                    AppendLog($"✅ 第 {currentLoop} 次列表循环完成");
                 }
             }
 
-            AppendLog($"停止多位置点击 - 共点击 {_clickCount} 次");
+            AppendLog($"⏹ 任务结束 - 共完成 {currentLoop} 次循环，总点击 {_clickCount} 次");
         }
 
         #endregion
@@ -474,7 +656,6 @@ namespace MouseClickTool
             btn_StartStop.BackColor = _isRunning ? Color.Red : Color.Green;
             btn_StartStop.ForeColor = Color.White;
 
-            // 启用/禁用控件
             btn_Add.Enabled = !_isRunning;
             btn_Update.Enabled = !_isRunning && _selectedIndex >= 0;
             btn_Delete.Enabled = !_isRunning && _selectedIndex >= 0;
@@ -486,6 +667,14 @@ namespace MouseClickTool
             txt_X.Enabled = !_isRunning;
             txt_Y.Enabled = !_isRunning;
             nud_Interval.Enabled = !_isRunning;
+
+            // 锁定复选框，防止运行中途切换模式
+            chk_BindWindow.Enabled = !_isRunning;
+
+            if (this.Controls.ContainsKey("nud_LoopCount") && nud_LoopCount != null)
+            {
+                nud_LoopCount.Enabled = !_isRunning;
+            }
         }
 
         private void UpdateButtonStates()
@@ -504,7 +693,6 @@ namespace MouseClickTool
                 Invoke((MethodInvoker)delegate { AppendLog(message); });
                 return;
             }
-
             string timestamp = DateTime.Now.ToString("HH:mm:ss");
             txt_Log.AppendText($"[{timestamp}] {message}{Environment.NewLine}");
             txt_Log.ScrollToCaret();
@@ -526,20 +714,40 @@ namespace MouseClickTool
 
         private void OnHotKeyPressed(object sender, HotKeyEventArgs e)
         {
-            if (e.KeyCode == Keys.F2 && e.IsAltPressed)
+            if (e.IsAltPressed)
             {
-                this.Invoke((MethodInvoker)delegate { btn_StartStop.PerformClick(); });
-            }
-            else if (e.KeyCode == Keys.F3 && e.IsAltPressed)
-            {
-                this.Invoke((MethodInvoker)delegate { btn_GetPos.PerformClick(); });
+                switch (e.KeyCode)
+                {
+                    case Keys.F2:
+                        // 修复：当窗口在后台时，PerformClick 会失效，必须直接调用底层的 Click 逻辑方法
+                        this.Invoke((MethodInvoker)delegate { btn_StartStop_Click(this, EventArgs.Empty); });
+                        break;
+                    case Keys.F3:
+                        // 同理，直接调用方法
+                        this.Invoke((MethodInvoker)delegate { btn_GetPos_Click(this, EventArgs.Empty); });
+                        break;
+                    case Keys.W:
+                        this.Invoke((MethodInvoker)delegate { BindTargetWindow(); });
+                        break;
+                }
             }
         }
 
         private void timer_MousePos_Tick(object sender, EventArgs e)
         {
             GetCursorPos(out POINT point);
-            lbl_CurrentPos.Text = $"X: {point.X}, Y: {point.Y}";
+
+            // 根据复选框状态智能显示实时坐标
+            if (chk_BindWindow.Checked && _targetHandle != IntPtr.Zero)
+            {
+                POINT p = point;
+                ScreenToClient(_targetHandle, ref p);
+                lbl_CurrentPos.Text = $"相对X: {p.X}, 相对Y: {p.Y}";
+            }
+            else
+            {
+                lbl_CurrentPos.Text = $"全局X: {point.X}, 全局Y: {point.Y}";
+            }
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -553,53 +761,47 @@ namespace MouseClickTool
 
         #endregion
 
-        #region Windows API 常量
+        #region Windows API 常量 
 
         private const int WH_MOUSE_LL = 14;
-        private const int WM_LBUTTONDOWN = 0x0201;
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int idHook,
-            LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool UnhookWindowsHookEx(IntPtr hhk);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode,
-            IntPtr wParam, IntPtr lParam);
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern IntPtr GetModuleHandle(string lpModuleName);
 
         private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
-
         #endregion
 
         #region 热键事件参数
-
         public class HotKeyEventArgs : EventArgs
         {
             public Keys KeyCode { get; set; }
             public bool IsAltPressed { get; set; }
-
             public HotKeyEventArgs(Keys keyCode, bool isAltPressed)
             {
                 KeyCode = keyCode;
                 IsAltPressed = isAltPressed;
             }
         }
-
         #endregion
     }
 
-    #region 键盘钩子类
+    #region 键盘钩子类 (增加拦截 Alt+W)
 
     public static class KeyboardHook
     {
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
+        private const int WM_SYSKEYDOWN = 0x0104;
 
         private static LowLevelKeyboardProc _proc;
         private static IntPtr _hookID = IntPtr.Zero;
@@ -626,29 +828,26 @@ namespace MouseClickTool
             using (Process curProcess = Process.GetCurrentProcess())
             using (ProcessModule curModule = curProcess.MainModule)
             {
-                return SetWindowsHookEx(WH_KEYBOARD_LL, proc,
-                    GetModuleHandle(curModule.ModuleName), 0);
+                return SetWindowsHookEx(WH_KEYBOARD_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
             }
         }
 
         private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN)
+            if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
             {
                 int vkCode = Marshal.ReadInt32(lParam);
                 Keys key = (Keys)vkCode;
 
                 bool altPressed = (GetAsyncKeyState(0x12) & 0x8000) != 0;
 
-                if (altPressed && key == Keys.F2)
+                if (altPressed)
                 {
-                    HotKeyPressed?.Invoke(null, new Form1.HotKeyEventArgs(Keys.F2, true));
-                    return (IntPtr)1;
-                }
-                else if (altPressed && key == Keys.F3)
-                {
-                    HotKeyPressed?.Invoke(null, new Form1.HotKeyEventArgs(Keys.F3, true));
-                    return (IntPtr)1;
+                    if (key == Keys.F2 || key == Keys.F3 || key == Keys.W)
+                    {
+                        HotKeyPressed?.Invoke(null, new Form1.HotKeyEventArgs(key, true));
+                        return (IntPtr)1;
+                    }
                 }
             }
 
@@ -659,22 +858,19 @@ namespace MouseClickTool
         private static extern short GetAsyncKeyState(int vKey);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int idHook,
-            LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool UnhookWindowsHookEx(IntPtr hhk);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode,
-            IntPtr wParam, IntPtr lParam);
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern IntPtr GetModuleHandle(string lpModuleName);
 
         private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
     }
-
     #endregion
 }
